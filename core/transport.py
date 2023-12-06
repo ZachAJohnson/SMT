@@ -115,8 +115,8 @@ class TransportProperties():
 		self.K_22_matrix = K_nm(self.g_matrix, 2, 2)
 
 	def update_number_densities(self):
-		ne = np.sum(self.Zbar_array*self._ni_array)
-		self.n_array[0]  = ne
+		self.ne = np.sum(self.Zbar_array*self._ni_array)
+		self.n_array[0]  = self.ne
 		self.n_array[1:] = self._ni_array  
 		self.x_array = self.n_array/np.sum(self.n_array)
 
@@ -135,22 +135,22 @@ class TransportProperties():
 		self.m_matrix = 2*self.m_array[:,np.newaxis]*self.m_array[np.newaxis,:]/(self.m_array[:,np.newaxis]+self.m_array[np.newaxis,:]) # twice the reduced mass
 
 	def update_T_matrix(self):
+		self.Te = self.T_array[0]
 		self.T_matrix = (self.m_array[:,np.newaxis]*self.T_array[np.newaxis,:] +
 						 self.m_array[np.newaxis,:]*self.T_array[:,np.newaxis])/(self.m_array[:,np.newaxis]+self.m_array[np.newaxis,:])
 		self.β_matrix = 1/self.T_matrix
 
+
 	def update_screening(self):
 		Ti = self.T_array[1:]
 		ρion = np.sum( self.ni_array*self.Zbar_array  )
-		ri_eff = (3*self.Zbar_array/ (4*π*ρion) )**(1/3)
-		ΓISi = Ti*self.Zbar_array**2/ri_eff 
+		self.ri_eff = (3*self.Zbar_array/ (4*π*ρion) )**(1/3)
+		self.ΓISi = self.Zbar_array**2/(self.ri_eff*Ti) 
 
-		ne = self.n_array[0]
-		Te = self.T_array[0]
-		EF = Fermi_Energy(ne)
-		λe = 1/np.sqrt(4*π*ne/(Te**(9/5) + (2/3*EF)**(9/5)  )**(5/9) ) 
-		λi = 1/np.sqrt(4*π*self.Zbar_array**2*ne/self.T_array[1:]) 
-		self.λeff = 1/np.sqrt( 1/λe**2 + np.sum(1/λi**2*(1/(1+3*ΓISi)))  )
+		self.EF = Fermi_Energy(self.ne)
+		self.λe = 1/np.sqrt(4*π*self.ne/(self.Te**(9/5) + (2/3*self.EF)**(9/5)  )**(5/9) ) 
+		self.λi = 1/np.sqrt(4*π*self.Zbar_array**2*self.n_array[1:]/self.T_array[1:]) 
+		self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi**2*(1+3*self.ΓISi))  ))
 		self.g_matrix = self.β_matrix*self.charge_matrix/self.λeff
 
 	def update_physical_params(self):
@@ -181,7 +181,7 @@ class TransportProperties():
 		if (self.T_array != np.ones_like(self.T_array)*self.T_array[0]).all():
 			print("Warning: Multiple temperature interdiffusion not implemented! Assuming temperature is cross temeprature.")
 		
-		nij = self.n_array[np.newaxis,:] + self.n_array[:,np.newaxis]
+		nij = self.n_array[np.newaxis,:] + self.n_array[:,np.newaxis] - np.diag(self.n_array) # Generalization of Eq. 12 from [2] and 55 of [1]
 		Zij = self.charge_matrix
 		self.Dij = 3*self.T_matrix**(5/2)/(16*np.sqrt(np.pi*self.m_matrix)*nij*Zij**2*self.K_11_matrix)
 		return self.Dij
@@ -196,9 +196,11 @@ class TransportProperties():
 		    
 		"""
 		Dei = self.Dij[0,1:]
+		nei = self.ne + self.n_array[1:] # Generalization of Eq. 12 from [2] and 55 of [1]
+
 		xi = self.x_array[1:]
 		Ti = self.T_array[1:]
-		self.σ = self.n_array[0]*np.sum( Ti*xi/Dei )
+		self.σ = self.ne*np.sum( Ti*xi/Dei )**-1
 		return self.σ
 
 
