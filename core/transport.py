@@ -145,12 +145,12 @@ class TransportProperties():
 		Ti = self.T_array[1:]
 		ρion = np.sum( self.ni_array*self.Zbar_array  )
 		self.ri_eff = (3*self.Zbar_array/ (4*π*ρion) )**(1/3)
-		self.ΓISi = self.Zbar_array**2/(self.ri_eff*Ti) 
+		self.Γi_array = self.Zbar_array**2/(self.ri_eff*Ti) 
 
 		self.EF = Fermi_Energy(self.ne)
 		self.λe = 1/np.sqrt(4*π*self.ne/(self.Te**(9/5) + (2/3*self.EF)**(9/5)  )**(5/9) ) 
 		self.λi = 1/np.sqrt(4*π*self.Zbar_array**2*self.n_array[1:]/self.T_array[1:]) 
-		self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi**2*(1+3*self.ΓISi))  ))
+		self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi**2*(1+3*self.Γi_array))  ))
 		self.g_matrix = self.β_matrix*self.charge_matrix/self.λeff
 
 	def update_physical_params(self):

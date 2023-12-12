@@ -19,6 +19,14 @@ def Degeneracy_Parameter(Te, ne):
     θ = Te/Fermi_Energy(ne)
     return θ
 
+def Ion_Plasma_Frequency(ni, mi, Zbar):
+    ωp = np.sqrt(4 * π *Zbar**2 * ni /mi)
+    return ωp
+
+def Electron_Plasma_Frequency(ne):
+    ωe = np.sqrt(4 * π * ne /m_e)
+    return ωe
+    
 def Gamma(T, n, Z):
     β = 1/T
     rs = rs_from_n(n)
@@ -74,7 +82,7 @@ def ThomasFermiZbar( Z, n_AU, T_AU):
         n_cc = n_AU * AU_to_invcc
         T_eV = T_AU * AU_to_eV
 
-        convert = n_cc*1.6726e-24
+        convert = n_cc*1.6726219e-24
         R = convert/Z
         T0 = T_eV/Z**(4./3.)
         Tf = T0/(1 + T0)
