@@ -28,11 +28,17 @@ def K_nm(g, n, m):
     if n and m == 2:
         a = np.array([0.85401, -0.22898, -0.60059, 0.80591, -0.30555])
         b = np.array([0.43475, -0.21147, 0.11116, 0.19665, 0.15195])
-        
+       
+    if n==1 and m==3:
+    	a = np.array([0.30346, 0.23739, -0.62167, 0.56110, -0.18046])
+    	b = np.array([0.68375, -0.38459, 0.10711, 0.10649, 0.028760]) 
     
     g_arr = np.array([g, g**2, g**3, g**4, g**5])
 
-    knm = np.where(g<1, -n/4 * np.math.factorial(m - 1) * np.log( np.sum(a[:,np.newaxis,np.newaxis]*g_arr,axis=0) )  , (b[0] + b[1]*np.log(g) + b[2]*np.log(g)**2)/(1 + b[3]*g + b[4]*g**2) )
+    knm = np.where( g<1, 
+    			    -n/4 * np.math.factorial(m - 1) * np.log( np.sum(a[:,np.newaxis,np.newaxis]*g_arr,axis=0) ) ,
+    				(b[0] + b[1]*np.log(g) + b[2]*np.log(g)**2)/(1 + b[3]*g + b[4]*g**2) 
+		    	  )
     
     return knm
 
@@ -113,6 +119,14 @@ class TransportProperties():
 		self.K_12_matrix = K_nm(self.g_matrix, 1, 2)
 		self.K_21_matrix = K_nm(self.g_matrix, 1, 1)
 		self.K_22_matrix = K_nm(self.g_matrix, 2, 2)
+		self.K_13_matrix = K_nm(self.g_matrix, 1, 3)
+
+	def update_collision_Ωij(self):
+		self.Ω_11_matrix = np.sqrt(2*π/self.μ_matrix)*self.charge_matrix**2/self.T_matrix**1.5 * self.K_11_matrix
+		self.Ω_12_matrix = np.sqrt(2*π/self.μ_matrix)*self.charge_matrix**2/self.T_matrix**1.5 * self.K_12_matrix
+		self.Ω_21_matrix = np.sqrt(2*π/self.μ_matrix)*self.charge_matrix**2/self.T_matrix**1.5 * self.K_21_matrix
+		self.Ω_22_matrix = np.sqrt(2*π/self.μ_matrix)*self.charge_matrix**2/self.T_matrix**1.5 * self.K_22_matrix
+		self.Ω_13_matrix = np.sqrt(2*π/self.μ_matrix)*self.charge_matrix**2/self.T_matrix**1.5 * self.K_13_matrix
 
 	def update_number_densities(self):
 		self.ne = np.sum(self.Zbar_array*self._ni_array)
@@ -133,6 +147,7 @@ class TransportProperties():
 		self.m_array[0]  = m_e
 		self.m_array[1:] = self._mi_array
 		self.m_matrix = 2*self.m_array[:,np.newaxis]*self.m_array[np.newaxis,:]/(self.m_array[:,np.newaxis]+self.m_array[np.newaxis,:]) # twice the reduced mass
+		self.μ_matrix = self.m_matrix/2
 
 	def update_T_matrix(self):
 		self.Te = self.T_array[0]
@@ -153,6 +168,7 @@ class TransportProperties():
 		self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi_array**2*(1+3*self.Γii_array))  ))
 		self.g_matrix = self.β_matrix*self.charge_matrix/self.λeff
 
+
 	def update_physical_params(self):
 		self.update_masses()
 		self.update_T_matrix()
@@ -166,13 +182,17 @@ class TransportProperties():
 		"""		
 		self.update_physical_params()
 		self.update_K_nm()
+		self.update_collision_Ωij()
 		self.inter_diffusion()
 		self.electrical_conductivity()
 		self.temperature_relaxation()
+		self.viscosity()
+		self.thermal_conductivity()
 
 	def inter_diffusion(self):
-		""" Computes the interdiffusion coefficient using generalization of eq. 12 from [2].
-
+		""" 
+		Computes the interdiffusion coefficient using generalization of eq. 12 from [2], also eq. 66 from [1]
+		To get cgs: AU_to_cm**2/AU_to_s
 		Returns
 		-------
 		Dei : matrix
@@ -182,13 +202,24 @@ class TransportProperties():
 		if (self.T_array != np.ones_like(self.T_array)*self.T_array[0]).all():
 			print("Warning: Multiple temperature interdiffusion not implemented! Assuming temperature is cross temeprature.")
 		
-		nij = self.n_array[np.newaxis,:] + self.n_array[:,np.newaxis] - np.diag(self.n_array) # Generalization of Eq. 12 from [2] and 55 of [1]
+		# nij = self.n_array[np.newaxis,:] + self.n_array[:,np.newaxis] - np.diag(self.n_array) # Generalization of Eq. 12 from [2] and 55 of [1]
+		ntot   = np.sum(self.n_array)
 		Zij = self.charge_matrix
-		self.Dij = 3*self.T_matrix**(5/2)/(16*np.sqrt(np.pi*self.m_matrix)*nij*Zij**2*self.K_11_matrix)
+		self.Dij = 3*self.T_matrix**(5/2)/(16*np.sqrt(np.pi*self.m_matrix)* ntot *Zij**2*self.K_11_matrix)
+		self.self_diffusion()
 		return self.Dij
+
+	def self_diffusion(self):
+		"""
+		Self diffusion defined as Dii * ntot/ni
+		To get cgs: AU_to_cm**2/AU_to_s
+		"""
+		self.D_array = np.diag(self.Dij)*np.sum(self.n_array)/self.n_array
+		return self.D_array
  	
 	def electrical_conductivity(self):
-		""" Computes the interdiffusion coefficient using generalization of eq. 13 from [2].
+		""" 
+		Computes the conductivity using eq. 13 from [2].
 
 		Returns
 		-------
@@ -197,14 +228,15 @@ class TransportProperties():
 		    
 		"""
 		Dei = self.Dij[0,1:]
-		nei = self.ne + self.n_array[1:] # Generalization of Eq. 12 from [2] and 55 of [1]
-
 		xi = self.x_array[1:]
 		Ti = self.T_array[1:]
 		self.σ = self.ne*np.sum( Ti*xi/Dei )**-1
 		return self.σ
 
 	def temperature_relaxation(self):
+		"""
+		Temperature relaxation between species, eq. 21 of [2]
+		"""
 		nj = self.n_array[np.newaxis,:]
 		numerator = 3*(self.m_array[:, np.newaxis] + self.m_array[np.newaxis,:])*self.T_matrix**1.5
 		denominator = (32*np.sqrt(π*self.m_matrix)*nj*self.charge_matrix**2*self.K_11_matrix )
@@ -212,7 +244,29 @@ class TransportProperties():
 		self.τij = numerator/denominator
 		return self.τij
 
+	def viscosity(self):
+		"""
+		Viscosity from Eq. 74 of [1] using multi-species Eq. 
+		To get cgs: AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
+		"""
+		if self.N_ions > 1:
+			print("Warning about viscosity: Only single-ion implemented. Returns single-species viscosity of each species input.")
+		Ωii_22 = np.diag(self.Ω_22_matrix)
+		self.ηi = 5*self.Ti_array/(8*Ωii_22)
+		return self.ηi
 
+	def thermal_conductivity(self):
+		"""
+		Thermal conductivity approximated by Eq.17 of [2]
+
+		"""
+		if self.N_ions > 1:
+				print("Warning about themal conductivity: Only single-ion implemented. Returns array of single-species e-i conductivities of each species input.")		
+
+		Tei = self.T_matrix[0,1:]
+		Λi  = np.sqrt(8)*self.K_22_matrix[0,0] + self._Z_array*(25*self.K_11_matrix[1:,1] - 20*self.K_12_matrix[1:,1] + 4*self.K_13_matrix[1:,1]) 
+		self.κi = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λi)
+		return self.κi
 
 
 
