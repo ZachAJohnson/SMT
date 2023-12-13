@@ -3,44 +3,53 @@ import numpy as np
 from SMT.core.physical_parameters import ThomasFermiZbar, Fermi_Energy
 from SMT.core.physical_constants import *
 
+@np.vectorize
 def K_nm(g, n, m):
-    """ Computes the plasma parameters (e.g. ion plasma frequency, ion-sphere radius, coupling parameter, etc.).
-                                    
-    Parameters
-    ----------
-    g : float or array_like
-        Plasma parameter (eq. 54 from [1]) 
-    n : int
-        Subscript for collision intergral Knm (eq. C22 from [1])
-    m : int
-        Subscript for collision integral Knm (eq. C22 from [1])
-        
-    Returns
-    -------
-    knm : array_like
-        Fit to collision integral (eqs. C22-C24 from [1])
-    """
+	""" Computes the plasma parameters (e.g. ion plasma frequency, ion-sphere radius, coupling parameter, etc.).
+	                                
+	Parameters
+	----------
+	g : float or array_like
+	    Plasma parameter (eq. 54 from [1]) 
+	n : int
+	    Subscript for collision intergral Knm (eq. C22 from [1])
+	m : int
+	    Subscript for collision integral Knm (eq. C22 from [1])
+	    
+	Returns
+	-------
+	knm : array_like
+	    Fit to collision integral (eqs. C22-C24 from [1])
+	"""
 
-    if n and m == 1:
-        a = np.array([1.4660, -1.7836, 1.4313, -0.55833, 0.061162])
-        b = np.array([0.081033, -0.091336, 0.051760, -0.50026, 0.17044])
-        
-    if n and m == 2:
-        a = np.array([0.85401, -0.22898, -0.60059, 0.80591, -0.30555])
-        b = np.array([0.43475, -0.21147, 0.11116, 0.19665, 0.15195])
-       
-    if n==1 and m==3:
-    	a = np.array([0.30346, 0.23739, -0.62167, 0.56110, -0.18046])
-    	b = np.array([0.68375, -0.38459, 0.10711, 0.10649, 0.028760]) 
-    
-    g_arr = np.array([g, g**2, g**3, g**4, g**5])
+	if n==1 and m == 1:
+		a = np.array([1.4660, -1.7836, 1.4313, -0.55833, 0.061162])
+		b = np.array([0.081033, -0.091336, 0.051760, -0.50026, 0.17044])
 
-    knm = np.where( g<1, 
-    			    -n/4 * np.math.factorial(m - 1) * np.log( np.sum(a[:,np.newaxis,np.newaxis]*g_arr,axis=0) ) ,
-    				(b[0] + b[1]*np.log(g) + b[2]*np.log(g)**2)/(1 + b[3]*g + b[4]*g**2) 
-		    	  )
-    
-    return knm
+	if n==2 and m == 2:
+		a = np.array([0.85401, -0.22898, -0.60059, 0.80591, -0.30555])
+		b = np.array([0.43475, -0.21147, 0.11116, 0.19665, 0.15195])
+
+	if (n==1 and m==2) or (m==1 and n==2):
+		a = np.array([0.52094, 0.25153, -1.1337, 1.2155, -0.43784])
+		b = np.array([0.20572, -0.16536, 0.061572, -0.12770, 0.066993])
+
+	if (n==1 and m==3) or (n==3 and m==1):
+		a = np.array([0.30346, 0.23739, -0.62167, 0.56110, -0.18046])
+		b = np.array([0.68375, -0.38459, 0.10711, 0.10649, 0.028760]) 
+
+	g_arr = np.array([g, g**2, g**3, g**4, g**5])
+
+	# knm = np.where( g<1, 
+	# 			    -n/4 * np.math.factorial(m - 1) * np.log( np.sum(a[:,np.newaxis,np.newaxis]*g_arr,axis=0) ) ,
+	# 				(b[0] + b[1]*np.log(g) + b[2]*np.log(g)**2)/(1 + b[3]*g + b[4]*g**2) 
+	# 	    	  )    
+
+	if g<1:
+		knm = -n/4 * np.math.factorial(m - 1) * np.log( np.sum(a*g_arr,axis=0) )
+	else:
+		knm = (b[0] + b[1]*np.log(g) + b[2]*np.log(g)**2)/(1 + b[3]*g + b[4]*g**2) 
+	return knm
 
 
 class TransportProperties():
@@ -117,7 +126,7 @@ class TransportProperties():
 	def update_K_nm(self):
 		self.K_11_matrix = K_nm(self.g_matrix, 1, 1)
 		self.K_12_matrix = K_nm(self.g_matrix, 1, 2)
-		self.K_21_matrix = K_nm(self.g_matrix, 1, 1)
+		self.K_21_matrix = K_nm(self.g_matrix, 2, 1)
 		self.K_22_matrix = K_nm(self.g_matrix, 2, 2)
 		self.K_13_matrix = K_nm(self.g_matrix, 1, 3)
 
@@ -264,7 +273,7 @@ class TransportProperties():
 				print("Warning about themal conductivity: Only single-ion implemented. Returns array of single-species e-i conductivities of each species input.")		
 
 		Tei = self.T_matrix[0,1:]
-		Λi  = np.sqrt(8)*self.K_22_matrix[0,0] + self._Z_array*(25*self.K_11_matrix[1:,1] - 20*self.K_12_matrix[1:,1] + 4*self.K_13_matrix[1:,1]) 
+		Λi  = np.sqrt(8)*self.K_22_matrix[0,0] + self.Zbar_array*(25*self.K_11_matrix[0,1:] - 20*self.K_12_matrix[0,1:] + 4*self.K_13_matrix[0,1:]) 
 		self.κi = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λi)
 		return self.κi
 
