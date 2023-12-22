@@ -148,8 +148,8 @@ class TransportProperties():
 			self.Zbar_array[:] = ThomasFermiZbar(self._Z_array, self._ni_array, self._T_array[1:])
 		else:
 			self.Zbar_array[:] = self._Zbar_input
-		self.charge_matrix[0,1:]  = + self.Zbar_array
-		self.charge_matrix[1:,0]  = + self.Zbar_array
+		self.charge_matrix[0,1:]  = self.Zbar_array
+		self.charge_matrix[1:,0]  = self.Zbar_array
 		self.charge_matrix[1:,1:] = self.Zbar_array[np.newaxis,:]*self.Zbar_array[:,np.newaxis]
 
 	def update_masses(self):
@@ -172,11 +172,14 @@ class TransportProperties():
 		self.Γii_array = self.Zbar_array**2/(self.ri_eff*self.Ti_array) 
 
 		self.EF = Fermi_Energy(self.ne)
-		self.λe = 1/np.sqrt(4*π*self.ne/(self.Te**(9/5) + (2/3*self.EF)**(9/5)  )**(5/9) ) 
-		self.λi_array = 1/np.sqrt(4*π*self.Zbar_array**2*self.ni_array/self.Ti_array) 
-		self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi_array**2*(1+3*self.Γii_array))  ))
-		self.g_matrix = self.β_matrix*self.charge_matrix/self.λeff
+		
+		self.λe = 1/np.sqrt(4*π*self.ne/(self.Te**(9/5) + (2/3*self.EF)**(9/5)  )**(5/9) ) # Option 1 approximation
+		self.λe = 1/np.sqrt(4*π*self.ne/np.sqrt(self.Te**2 + (2/3*self.EF)**2  )) # Option 2 approximation
 
+		self.λi_array = 1/np.sqrt(4*π*self.Zbar_array**2*self.ni_array/self.Ti_array) 
+		# self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi_array**2*(1+3*self.Γii_array))  ))
+		self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi_array**2 + self.ri_eff**2)  ))
+		self.g_matrix = self.β_matrix*self.charge_matrix/self.λeff
 
 	def update_physical_params(self):
 		self.update_masses()
@@ -273,8 +276,10 @@ class TransportProperties():
 				print("Warning about themal conductivity: Only single-ion implemented. Returns array of single-species e-i conductivities of each species input.")		
 
 		Tei = self.T_matrix[0,1:]
+		Te  = self.T_matrix[0,0]
 		Λi  = np.sqrt(8)*self.K_22_matrix[0,0] + self.Zbar_array*(25*self.K_11_matrix[0,1:] - 20*self.K_12_matrix[0,1:] + 4*self.K_13_matrix[0,1:]) 
 		self.κi = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λi)
+		self.κee = 75*Te**2.5/(64*np.sqrt(π*m_e)*self.K_22_matrix[0,0])
 		return self.κi
 
 
