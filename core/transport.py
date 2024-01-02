@@ -67,25 +67,29 @@ class TransportProperties():
 
 	"""
 
-	def __init__(self, N_ions, ion_masses_AU, Zion_array, T_array_AU, ni_array_AU, Zbar_array=None):
+	def __init__(self, N_ions, ion_masses_AU, Zion_array, T_array_AU, ni_array_AU, Zbar_type='TF', Zbar_array=None):
 		"""
 		Electrons....
 		"""
 		self.N_ions   = N_ions
-		self._Z_array  = Zion_array 
+		self._Zi_array  = Zion_array 
 		self._T_array  = T_array_AU
 		self._mi_array  = ion_masses_AU
 		self._ni_array = ni_array_AU
-		self._Zbar_input = Zbar_array
 
-		self.Zbar_array = np.zeros(self.N_ions)
-
+		# Make either TF Zbar or use input Zbar
+		self.Zbar_type = Zbar_type
+		if self.Zbar_type == 'input':
+			self._Zbar_array = Zbar_array
+		else:
+			self._Zbar_array = np.zeros(self.N_ions)
+		
 		self.m_array = np.zeros(self.N_ions + 1 )
 		self.n_array = np.zeros(self.N_ions + 1 )
 
 		self.charge_matrix = np.ones((self.N_ions + 1 ,self.N_ions + 1 ))
 
-		self.update_all_transport()
+		self.update_all_params()
 
 	@property
 	def T_array(self):
@@ -94,7 +98,7 @@ class TransportProperties():
 	@T_array.setter
 	def T_array(self, T_array_update):
 		self._T_array = T_array_update
-		self.update_all_transport()
+		self.update_all_params()
 
 	@property
 	def ni_array(self):
@@ -103,16 +107,25 @@ class TransportProperties():
 	@ni_array.setter
 	def ni_array(self, n_array_update):
 		self._ni_array = ni_array_update
-		self.update_all_transport()
+		self.update_all_params()
 	
 	@property
 	def Zi_array(self):
 		return self._Zi_array
 
 	@Zi_array.setter
-	def Zi_array(self, n_array_update):
+	def Zi_array(self, Zi_array_update):
 		self._Zi_array = Zi_array_update
-		self.update_all_transport()
+		self.update_all_params()
+
+	@property
+	def Zbar_array(self):
+		return self._Zbar_array
+
+	@Zbar_array.setter
+	def Zbar_array(self, Zbar_array_update):
+		self._Zbar_array = Zbar_array_update
+		self.update_all_params()
 
 	@property
 	def mi_array(self):
@@ -121,7 +134,7 @@ class TransportProperties():
 	@mi_array.setter
 	def mi_array(self, m_array_update):
 		self._mi_array   = mi_array_update
-		self.update_all_transport()
+		self.update_all_params()
 
 	def update_K_nm(self):
 		self.K_11_matrix = K_nm(self.g_matrix, 1, 1)
@@ -138,19 +151,20 @@ class TransportProperties():
 		self.Ω_13_matrix = np.sqrt(2*π/self.μ_matrix)*self.charge_matrix**2/self.T_matrix**1.5 * self.K_13_matrix
 
 	def update_number_densities(self):
-		self.ne = np.sum(self.Zbar_array*self._ni_array)
+		self.ne = np.sum(self._Zbar_array*self._ni_array)
 		self.n_array[0]  = self.ne
 		self.n_array[1:] = self._ni_array  
 		self.x_array = self.n_array/np.sum(self.n_array)
 
-	def update_Zbar(self):
-		if self._Zbar_input is None:
-			self.Zbar_array[:] = ThomasFermiZbar(self._Z_array, self._ni_array, self._T_array[1:])
-		else:
-			self.Zbar_array[:] = self._Zbar_input
-		self.charge_matrix[0,1:]  = self.Zbar_array
-		self.charge_matrix[1:,0]  = self.Zbar_array
-		self.charge_matrix[1:,1:] = self.Zbar_array[np.newaxis,:]*self.Zbar_array[:,np.newaxis]
+	def update_charges(self):
+		# Check if need to compute TF ionization
+		if self.Zbar_type == 'TF':
+			self._Zbar_array[:] = ThomasFermiZbar(self._Zi_array, self._ni_array, self._T_array[1:])
+	
+		# Get full charge matrix Z_i Z_j
+		self.charge_matrix[0,1:]  = self._Zbar_array
+		self.charge_matrix[1:,0]  = self._Zbar_array
+		self.charge_matrix[1:,1:] = self._Zbar_array[np.newaxis,:]*self._Zbar_array[:,np.newaxis]
 
 	def update_masses(self):
 		self.m_array[0]  = m_e
@@ -167,16 +181,16 @@ class TransportProperties():
 		
 
 	def update_screening(self):
-		ρion = np.sum( self.ni_array*self.Zbar_array  )
-		self.ri_eff = (3*self.Zbar_array/ (4*π*ρion) )**(1/3)
-		self.Γii_array = self.Zbar_array**2/(self.ri_eff*self.Ti_array) 
+		ρion = np.sum( self.ni_array*self._Zbar_array  )
+		self.ri_eff = (3*self._Zbar_array/ (4*π*ρion) )**(1/3)
+		self.Γii_array = self._Zbar_array**2/(self.ri_eff*self.Ti_array) 
 
 		self.EF = Fermi_Energy(self.ne)
 		
 		self.λe = 1/np.sqrt(4*π*self.ne/(self.Te**(9/5) + (2/3*self.EF)**(9/5)  )**(5/9) ) # Option 1 approximation
 		self.λe = 1/np.sqrt(4*π*self.ne/np.sqrt(self.Te**2 + (2/3*self.EF)**2  )) # Option 2 approximation
 
-		self.λi_array = 1/np.sqrt(4*π*self.Zbar_array**2*self.ni_array/self.Ti_array) 
+		self.λi_array = 1/np.sqrt(4*π*self._Zbar_array**2*self.ni_array/self.Ti_array) 
 		# self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi_array**2*(1+3*self.Γii_array))  ))
 		self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi_array**2 + self.ri_eff**2)  ))
 		self.g_matrix = self.β_matrix*self.charge_matrix/self.λeff
@@ -184,11 +198,11 @@ class TransportProperties():
 	def update_physical_params(self):
 		self.update_masses()
 		self.update_T_matrix()
-		self.update_Zbar()
+		self.update_charges()
 		self.update_number_densities()
 		self.update_screening()		
 
-	def update_all_transport(self):
+	def update_all_params(self):
 		"""
 		updates everything
 		"""		
@@ -262,8 +276,8 @@ class TransportProperties():
 		To get cgs: AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
 		"""
 		if self.N_ions > 1:
-			print("Warning about viscosity: Only single-ion implemented. Returns single-species viscosity of each species input.")
-		Ωii_22 = np.diag(self.Ω_22_matrix)
+			print("Warning about viscosity: Only single-ion (and no electron) implemented. Returns single-species viscosity of each species input.")
+		Ωii_22 = np.diag(self.Ω_22_matrix)[1:]
 		self.ηi = 5*self.Ti_array/(8*Ωii_22)
 		return self.ηi
 
@@ -277,7 +291,7 @@ class TransportProperties():
 
 		Tei = self.T_matrix[0,1:]
 		Te  = self.T_matrix[0,0]
-		Λi  = np.sqrt(8)*self.K_22_matrix[0,0] + self.Zbar_array*(25*self.K_11_matrix[0,1:] - 20*self.K_12_matrix[0,1:] + 4*self.K_13_matrix[0,1:]) 
+		Λi  = np.sqrt(8)*self.K_22_matrix[0,0] + self._Zbar_array*(25*self.K_11_matrix[0,1:] - 20*self.K_12_matrix[0,1:] + 4*self.K_13_matrix[0,1:]) 
 		self.κi = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λi)
 		self.κee = 75*Te**2.5/(64*np.sqrt(π*m_e)*self.K_22_matrix[0,0])
 		return self.κi
