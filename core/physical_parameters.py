@@ -94,43 +94,14 @@ def ThomasFermiZbar( Z, n_AU, T_AU):
         x = alpha*Q**beta
 
         return Z*x/(1 + x + np.sqrt(1 + 2.*x))
-    
-def ThomasFermiZbar( Z, n_AU, T_AU):
+
+# XC fits
+def xc_PDW_h(θ): 
     """
-    Finite Temperature Thomas Fermi Charge State using 
-    R.M. More, "Pressure Ionization, Resonances, and the
-    Continuity of Bound and Free States", Adv. in Atomic 
-    Mol. Phys., Vol. 21, p. 332 (Table IV).
-    
-    Z = atomic number
-    num_density = number density (1/cc)
-    T = temperature (eV)
+    See [4]
     """
+    N = 1 + 2.8343*θ**2 - 0.2151*θ**3 + 5.2759*θ**4
+    D = 1 + 3.9431*θ**2 + 7.9138*θ**4
+    h = N/D * np.tanh(1/θ)
+    return h
 
-    alpha = 14.3139
-    beta = 0.6624
-    a1 = 0.003323
-    a2 = 0.9718
-    a3 = 9.26148e-5
-    a4 = 3.10165
-    b0 = -1.7630
-    b1 = 1.43175
-    b2 = 0.31546
-    c1 = -0.366667
-    c2 = 0.983333
-
-    num_density = n_AU * AU_to_invcc
-    T = T_AU*AU_to_eV
-
-    convert = num_density*1.6726e-24
-    R = convert/Z
-    T0 = T/Z**(4./3.)
-    Tf = T0/(1 + T0)
-    A = a1*T0**a2 + a3*T0**a4
-    B = -np.exp(b0 + b1*Tf + b2*Tf**7)
-    C = c1*Tf + c2
-    Q1 = A*R**B
-    Q = (R**C + Q1**C)**(1/C)
-    x = alpha*Q**beta
-
-    return Z*x/(1 + x + np.sqrt(1 + 2.*x))

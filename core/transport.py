@@ -1,6 +1,6 @@
 import numpy as np
 
-from SMT.core.physical_parameters import ThomasFermiZbar, Fermi_Energy
+from SMT.core.physical_parameters import ThomasFermiZbar, Fermi_Energy, Degeneracy_Parameter, xc_PDW_h
 from SMT.core.physical_constants import *
 
 @np.vectorize
@@ -51,7 +51,6 @@ def K_nm(g, n, m):
 		knm = (b[0] + b[1]*np.log(g) + b[2]*np.log(g)**2)/(1 + b[3]*g + b[4]*g**2) 
 	return knm
 
-
 class TransportProperties():
 	"""Generate the Stanton and Murillo transport coefficients. test
 
@@ -64,18 +63,25 @@ class TransportProperties():
 	 Physical Review E 93.4 (2016): 043203. <https://doi.org/10.1103/PhysRevE.93.043203>`_
 	   [2] `Stanton, Liam G., and Michael S. Murillo.  ""Efficient model for electronic transport in high energy-
 		density matter" Phys. Plasmas 28, 082301 (2021); <https://doi.org/10.1063/5.0048162>
-
+	   [3] 'Johnson, Zach A., ....... (2024)'
+	   [4] 'F. Perrot and M. Dharma-Wardana', Exchange and correlation potentials for electron-ion systems at finite tem-
+      peratures, Physical Review A 30, 2619 (1984) <https://doi.org/10.1103/PhysRevA.30.2619>
 	"""
 
-	def __init__(self, N_ions, ion_masses_AU, Zion_array, T_array_AU, ni_array_AU, Zbar_type='TF', Zbar_array=None):
+	def __init__(self, N_ions, ion_masses_AU, Zion_array, T_array_AU, ni_array_AU, Zbar_type='TF', Zbar_array=None, improved_xc_SMT=True, xc_type='PDW'):
 		"""
 		Electrons....
 		"""
+		
 		self.N_ions   = N_ions
 		self._Zi_array  = Zion_array 
 		self._T_array  = T_array_AU
 		self._mi_array  = ion_masses_AU
 		self._ni_array = ni_array_AU
+
+		# Whether or not to include an xc correction to the screening length, see [3]
+		self.improved_xc_SMT = improved_xc_SMT
+		self._xc_type        = xc_type
 
 		# Make either TF Zbar or use input Zbar
 		self.Zbar_type = Zbar_type
@@ -136,6 +142,15 @@ class TransportProperties():
 		self._mi_array   = mi_array_update
 		self.update_all_params()
 
+	@property
+	def xc_type(self):
+		return self._xc_type
+
+	@xc_type.setter
+	def xc_type(self, xc_type):
+		self._xc_type   = xc_type
+		self.update_all_params()
+
 	def update_K_nm(self):
 		self.K_11_matrix = K_nm(self.g_matrix, 1, 1)
 		self.K_12_matrix = K_nm(self.g_matrix, 1, 2)
@@ -180,6 +195,19 @@ class TransportProperties():
 		self.β_matrix = 1/self.T_matrix
 		
 
+	def update_xc_correction(self):
+
+		if self._xc_type == 'PDW':
+			θ = Degeneracy_Parameter(self.Te, self.ne)
+			
+			h = xc_PDW_h(θ)
+			hprime = (xc_PDW_h(θ*(1+1e-6)) - xc_PDW_h(θ*(1-1e-6)) )/(2e-6*θ)
+
+			self.γ0 = θ/(8*self.Te) * (  h  - 2*θ*hprime )
+		else:
+			print(f"WARNING: {self._xc_type} not implemented.")
+
+
 	def update_screening(self):
 		ρion = np.sum( self.ni_array*self._Zbar_array  )
 		self.ri_eff = (3*self._Zbar_array/ (4*π*ρion) )**(1/3)
@@ -187,12 +215,22 @@ class TransportProperties():
 
 		self.EF = Fermi_Energy(self.ne)
 		
-		self.λe = 1/np.sqrt(4*π*self.ne/(self.Te**(9/5) + (2/3*self.EF)**(9/5)  )**(5/9) ) # Option 1 approximation
-		self.λe = 1/np.sqrt(4*π*self.ne/np.sqrt(self.Te**2 + (2/3*self.EF)**2  )) # Option 2 approximation
+		# Electron Screening length from original SMT (no xc)
+		self.λe0 = 1/np.sqrt(4*π*self.ne/(self.Te**(9/5) + (2/3*self.EF)**(9/5)  )**(5/9) ) # Option 1 approximation
+		self.λe0 = 1/np.sqrt(4*π*self.ne/np.sqrt(self.Te**2 + (2/3*self.EF)**2  )) # Option 2 approximation
 
+		if self.improved_xc_SMT == True:
+			self.λe = np.sqrt(  self.λe0**2  - self.γ0 ) # SMT xc correction, see [3]
+		else:
+			self.λe = self.λe0 # Keep original SMT screening [1,2]
+
+		# Array of ionic screening lengths 
 		self.λi_array = 1/np.sqrt(4*π*self._Zbar_array**2*self.ni_array/self.Ti_array) 
+		
+
 		# self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi_array**2*(1+3*self.Γii_array))  ))
 		self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi_array**2 + self.ri_eff**2)  ))
+		
 		self.g_matrix = self.β_matrix*self.charge_matrix/self.λeff
 
 	def update_physical_params(self):
@@ -200,6 +238,7 @@ class TransportProperties():
 		self.update_T_matrix()
 		self.update_charges()
 		self.update_number_densities()
+		self.update_xc_correction()
 		self.update_screening()		
 
 	def update_all_params(self):
