@@ -38,6 +38,9 @@ def Debye_length(T, ni, Zbar):
     λD = 1/np.sqrt(  4*π*ne/T )
     return λD
 
+def thermal_deBroglie_wavelength(T, m):
+    return np.sqrt(2*π/ (m*T) )
+
 def Kappa(T, ni, Zbar):
     rs = rs_from_n(ni)
     λD = Debye_length(T, ni, Zbar)
