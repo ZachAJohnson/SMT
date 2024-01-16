@@ -165,17 +165,21 @@ class TransportProperties():
 		self.update_all_params()
 
 	def update_K_nm(self):
+		self.f_PB_matrix = np.ones_like(self.charge_matrix)
+
 		if self.improved_PauliBlocking == True:
 			θ = Degeneracy_Parameter(self.Te, self.ne)
 			a, b, n = 0.52035809, 1.2766832,  1.83874532
 			self.f_PB = 1/(b*(1 + (a/θ)**n)**(1/n) )
-		else:
-			self.f_PB = 1
-		self.K_11_matrix = self.f_PB * K_nm(self.g_matrix, 1, 1)
-		self.K_12_matrix = self.f_PB * K_nm(self.g_matrix, 1, 2)
-		self.K_21_matrix = self.f_PB * K_nm(self.g_matrix, 2, 1)
-		self.K_22_matrix = self.f_PB * K_nm(self.g_matrix, 2, 2)
-		self.K_13_matrix = self.f_PB * K_nm(self.g_matrix, 1, 3)
+			
+			self.f_PB_matrix[0,:] = self.f_PB
+			self.f_PB_matrix[:,0] = self.f_PB
+		
+		self.K_11_matrix = self.f_PB_matrix * K_nm(self.g_matrix, 1, 1)
+		self.K_12_matrix = self.f_PB_matrix * K_nm(self.g_matrix, 1, 2)
+		self.K_21_matrix = self.f_PB_matrix * K_nm(self.g_matrix, 2, 1)
+		self.K_22_matrix = self.f_PB_matrix * K_nm(self.g_matrix, 2, 2)
+		self.K_13_matrix = self.f_PB_matrix * K_nm(self.g_matrix, 1, 3)
 
 	def update_collision_Ωij(self):
 		self.Ω_11_matrix = np.sqrt(2*π/self.μ_matrix)*self.charge_matrix**2/self.T_matrix**1.5 * self.K_11_matrix
@@ -238,20 +242,27 @@ class TransportProperties():
 		elif option==2:
 			self.λe = 1/np.sqrt(4*π*self.ne/np.sqrt(self.Te**2 + (2/3*self.EF)**2  )) # Option 2 approximation
 
-	def dB_improved_SMT_λe(self):
+	def f_dB_improved_SMT(self):
 		"""
 		Diffraction corrected 
 		"""
-		λdBroglie = thermal_deBroglie_wavelength(self.Te, m_e)
+		μ_ee = m_e/2
+		μ_ei = m_e
+		λdB_ee = 1/np.sqrt(2*π*μ_ee*self.Te) # Approx by mi~0, so here the λdB_ee is sqrt(2) times bigger
+		λdB_ei = 1/np.sqrt(2*π*μ_ei*self.Te) # Approx by mi~0
+
 		xi_array = self.ni_array/np.sum(self.ni_array) 
 		rc_av =   np.sum(xi_array * self.Zbar_array/ self.T_matrix[1:])/self.N_ions
 		
-		self.f_dB = (  1  +  (2*π*λdBroglie/rc_av)**2) # Does something
-		# self.f_dB = (  1  +  (λdBroglie/rc_av)**2) # Does nothing
-
-		# # Delete later
-		# self.f_dB =  (2*π*λdBroglie/rc_av)**2 # Does something
-
+		f_dB_ee = (  1  +  (2*π*λdB_ee/rc_av)**2) # extra 2π factor
+		f_dB_ei = (  1  +  (2*π*λdB_ei/rc_av)**2) # 
+		
+		self.f_dB_matrix = np.ones_like(self.charge_matrix)
+		self.f_dB_matrix[0,0]  = f_dB_ee
+		self.f_dB_matrix[0,1:] = f_dB_ei
+		self.f_dB_matrix[1:,0] = f_dB_ei
+		# self.f_dB_matrix[1:,1:]= 1
+		
 	def update_screening(self):
 		ρion = np.sum( self.ni_array*self._Zbar_array  )
 		self.ri_eff = (3*self._Zbar_array/ (4*π*ρion) )**(1/3)
@@ -270,9 +281,9 @@ class TransportProperties():
 			self.γ0 = 0
 
 		if self.improved_λdB_SMT == True: # High T Quantum Dispersion Improvement
-			self.dB_improved_SMT_λe()
+			self.f_dB_improved_SMT()
 		else:
-			self.f_dB = 1
+			self.f_dB_matrix = np.ones_like(self.charge_matrix)
 
 		if self.improved_ae_SMT == True: # Low T Clamp on screening length by ae
 			self.ae = rs_from_n(self.ne)
@@ -285,7 +296,7 @@ class TransportProperties():
 
 		self.λeff = 1/np.sqrt( 1/(self.λe**2 + self.ae_correction**2 - self.γ0 ) + np.sum( 1/(self.λi_array**2 + self.ri_eff**2)  ))
 		
-		self.g_matrix = self.β_matrix*self.charge_matrix/self.λeff
+		self.g_matrix = self.β_matrix*self.charge_matrix* np.sqrt(self.f_dB_matrix)/self.λeff # Equivalent to [3], but made not part of λeff here.
 
 	def update_physical_params(self):
 		self.update_masses()
