@@ -38,13 +38,21 @@ def Debye_length(T, ni, Zbar):
     λD = 1/np.sqrt(  4*π*ne/T )
     return λD
 
+def Thomas_Fermi_screening_length(T, ni, Zbar):
+    ne = Zbar*ni
+    E_F = Fermi_Energy(ne)
+    # λTF = 1/np.sqrt(  4*π*ne/np.sqrt(T**2 + (2/3*E_F)**2) )
+    λTF = 1/np.sqrt(  4*π*ne/(T**1.8 + (2/3*E_F)**1.8)**(5/9) )
+    return λTF
+
 def thermal_deBroglie_wavelength(T, m):
-    return np.sqrt(2*π/ (m*T) )
+    # return np.sqrt(2*π/ (m*T) )
+    return 1/np.sqrt(2*π*m*T)
 
 def Kappa(T, ni, Zbar):
-    rs = rs_from_n(ni)
-    λD = Debye_length(T, ni, Zbar)
-    return rs/λD
+    ri = rs_from_n(ni)
+    λD = Thomas_Fermi_screening_length(T, ni, Zbar)
+    return ri/λD
 
 def n_from_rs( rs):
     """
@@ -107,4 +115,22 @@ def xc_PDW_h(θ):
     D = 1 + 3.9431*θ**2 + 7.9138*θ**4
     h = N/D * np.tanh(1/θ)
     return h
+
+# XC fits
+def xc_YOT(Te, ne): 
+    """
+    See [5]
+    """
+    θ = Degeneracy_Parameter(Te, ne)
+    β = 1/Te
+    sech = lambda x: 1/np.cosh(x)
+    γx = 1/(2*π) * (3*ne/(8*π))**(1/3) * np.tanh(4/(9*θ)) + ne/(12*Te) * sech(4/(9*θ))**2
+    a = -1.51
+    b = -0.840
+    c = 0.275
+    d = -0.553
+
+    γc = 1/4 * (β*ne/π)**(1/2) *( np.tanh(c*β**a*ne**b/(1+β**d)) + 2/3 * b*c*β**a/(1 + β**d*ne**(b+1/2))*sech(c*β**a*ne**b/(1+β**d))**2  )
+    γxc = γx + γc
+    return γxc
 

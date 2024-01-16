@@ -1,6 +1,6 @@
 import numpy as np
 
-from SMT.core.physical_parameters import ThomasFermiZbar, Fermi_Energy, Degeneracy_Parameter, xc_PDW_h, thermal_deBroglie_wavelength
+from SMT.core.physical_parameters import ThomasFermiZbar, Fermi_Energy, Degeneracy_Parameter, xc_PDW_h, xc_YOT, thermal_deBroglie_wavelength, rs_from_n
 from SMT.core.physical_constants import *
 
 @np.vectorize
@@ -69,11 +69,10 @@ class TransportProperties():
 	"""
 
 	def __init__(self, N_ions, ion_masses_AU, Zion_array, T_array_AU, ni_array_AU, Zbar_type='TF', Zbar_array=None,
-						 improved_xc_SMT=False, improved_λdB_SMT=False, xc_type='PDW', λdB_n = 2):
+						 improved_xc_SMT=False, improved_λdB_SMT=False, improved_ae_SMT=False, improved_PauliBlocking=False,  xc_type='PDW', λdB_n = 2):
 		"""
-		Electrons....
+		Defaults to SMT model in [1,2], with improved_... denoting the improvements in [3]
 		"""
-		
 		self.N_ions   = N_ions
 		self._Zi_array  = Zion_array 
 		self._T_array  = T_array_AU
@@ -83,12 +82,14 @@ class TransportProperties():
 		# Whether or not to include an xc correction to the screening length, see [3]
 		self.improved_xc_SMT  = improved_xc_SMT
 		self.improved_λdB_SMT = improved_λdB_SMT
+		self.improved_ae_SMT  = improved_ae_SMT
+		self.improved_PauliBlocking =  improved_PauliBlocking
 		self._xc_type         = xc_type
 		self._λdB_n           = λdB_n
 
 		# Make either TF Zbar or use input Zbar
 		self.Zbar_type = Zbar_type
-		if self.Zbar_type == 'input':
+		if (self.Zbar_type == 'input') and (Zbar_array is not None):	
 			self._Zbar_array = Zbar_array
 		else:
 			self._Zbar_array = np.zeros(self.N_ions)
@@ -164,11 +165,17 @@ class TransportProperties():
 		self.update_all_params()
 
 	def update_K_nm(self):
-		self.K_11_matrix = K_nm(self.g_matrix, 1, 1)
-		self.K_12_matrix = K_nm(self.g_matrix, 1, 2)
-		self.K_21_matrix = K_nm(self.g_matrix, 2, 1)
-		self.K_22_matrix = K_nm(self.g_matrix, 2, 2)
-		self.K_13_matrix = K_nm(self.g_matrix, 1, 3)
+		if self.improved_PauliBlocking == True:
+			θ = Degeneracy_Parameter(self.Te, self.ne)
+			a, b, n = 0.52035809, 1.2766832,  1.83874532
+			self.f_PB = 1/(b*(1 + (a/θ)**n)**(1/n) )
+		else:
+			self.f_PB = 1
+		self.K_11_matrix = self.f_PB * K_nm(self.g_matrix, 1, 1)
+		self.K_12_matrix = self.f_PB * K_nm(self.g_matrix, 1, 2)
+		self.K_21_matrix = self.f_PB * K_nm(self.g_matrix, 2, 1)
+		self.K_22_matrix = self.f_PB * K_nm(self.g_matrix, 2, 2)
+		self.K_13_matrix = self.f_PB * K_nm(self.g_matrix, 1, 3)
 
 	def update_collision_Ωij(self):
 		self.Ω_11_matrix = np.sqrt(2*π/self.μ_matrix)*self.charge_matrix**2/self.T_matrix**1.5 * self.K_11_matrix
@@ -187,7 +194,7 @@ class TransportProperties():
 		# Check if need to compute TF ionization
 		if self.Zbar_type == 'TF':
 			self._Zbar_array[:] = ThomasFermiZbar(self._Zi_array, self._ni_array, self._T_array[1:])
-	
+		
 		# Get full charge matrix Z_i Z_j
 		self.charge_matrix[0,1:]  = self._Zbar_array
 		self.charge_matrix[1:,0]  = self._Zbar_array
@@ -216,6 +223,8 @@ class TransportProperties():
 			hprime = (xc_PDW_h(θ*(1+1e-6)) - xc_PDW_h(θ*(1-1e-6)) )/(2e-6*θ)
 
 			self.γ0 = θ/(8*self.Te) * (  h  - 2*θ*hprime )
+		elif self._xc_type == 'YOT':
+			self.γ0 = xc_YOT(self.Te, self.ne)
 		else:
 			print(f"WARNING: {self._xc_type} not implemented.")
 
@@ -229,24 +238,19 @@ class TransportProperties():
 		elif option==2:
 			self.λe = 1/np.sqrt(4*π*self.ne/np.sqrt(self.Te**2 + (2/3*self.EF)**2  )) # Option 2 approximation
 
-	def xc_improved_SMT_λe(self):
-		"""
-		xc correction, see [3].
-		"""
-		self.λe = np.sqrt(  self.λe**2  - self.γ0 )
-
 	def dB_improved_SMT_λe(self):
 		"""
 		Diffraction corrected 
 		"""
 		λdBroglie = thermal_deBroglie_wavelength(self.Te, m_e)
-		rc_array =  self.Zbar_array/ ( self.Ti_array + self.Te)
+		xi_array = self.ni_array/np.sum(self.ni_array) 
+		rc_av =   np.sum(xi_array * self.Zbar_array/ self.T_matrix[1:])/self.N_ions
 		
-		λe_array = self.λe * 1 / (1 + (λdBroglie/rc_array)**self.λdB_n )**(1/self.λdB_n)
-		
-		self.rc_array = rc_array
-		self.λdBroglie = λdBroglie
-		self.λe = 1/np.sqrt( np.sum( 1/λe_array**2  ))
+		self.f_dB = (  1  +  (2*π*λdBroglie/rc_av)**2) # Does something
+		# self.f_dB = (  1  +  (λdBroglie/rc_av)**2) # Does nothing
+
+		# # Delete later
+		# self.f_dB =  (2*π*λdBroglie/rc_av)**2 # Does something
 
 	def update_screening(self):
 		ρion = np.sum( self.ni_array*self._Zbar_array  )
@@ -258,19 +262,28 @@ class TransportProperties():
 		# Electron Screening length from original SMT (no xc)
 		self.standard_SMT_λe()
 
-		if self.improved_xc_SMT == True and self.improved_λdB_SMT == False:
-			self.xc_improved_SMT_λe()
-		elif self.improved_λdB_SMT == True and self.improved_xc_SMT == False:
+		# Now add modifications
+		self.f_mod_SMT = 1
+		if self.improved_xc_SMT == True: #xc correction
+			self.update_xc_correction()
+		else:
+			self.γ0 = 0
+
+		if self.improved_λdB_SMT == True: # High T Quantum Dispersion Improvement
 			self.dB_improved_SMT_λe()
-		elif self.improved_λdB_SMT == True and self.improved_xc_SMT == True:
-			self.xc_improved_SMT_λe()
-			self.dB_improved_SMT_λe()
+		else:
+			self.f_dB = 1
+
+		if self.improved_ae_SMT == True: # Low T Clamp on screening length by ae
+			self.ae = rs_from_n(self.ne)
+			self.ae_correction = self.ae
+		else:
+			self.ae_correction = 0
 	
 		# Array of ionic screening lengths 
 		self.λi_array = 1/np.sqrt(4*π*self._Zbar_array**2*self.ni_array/self.Ti_array) 	
 
-		# self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi_array**2*(1+3*self.Γii_array))  ))
-		self.λeff = 1/np.sqrt( 1/self.λe**2 + np.sum( 1/(self.λi_array**2 + self.ri_eff**2)  ))
+		self.λeff = 1/np.sqrt( 1/(self.λe**2 + self.ae_correction**2 - self.γ0 ) + np.sum( 1/(self.λi_array**2 + self.ri_eff**2)  ))
 		
 		self.g_matrix = self.β_matrix*self.charge_matrix/self.λeff
 
@@ -377,8 +390,8 @@ class TransportProperties():
 		self.κee = 75*Te**2.5/(64*np.sqrt(π*m_e)*self.K_22_matrix[0,0])
 
 		# Define κe by removing Kii, Kee
-		Λei   = self._Zbar_array*(25*self.K_11_matrix[0,1:] - 20*self.K_12_matrix[0,1:] + 4*self.K_13_matrix[0,1:]) 
-		self.κe  = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λei)
+		# Λei   = self._Zbar_array*(25*self.K_11_matrix[0,1:] - 20*self.K_12_matrix[0,1:] + 4*self.K_13_matrix[0,1:]) 
+		self.κe  = self.κ#75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λei)
 
 
 
