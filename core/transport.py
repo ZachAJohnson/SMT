@@ -165,21 +165,65 @@ class TransportProperties():
 		self.update_all_params()
 
 	def update_K_nm(self):
-		self.f_PB_matrix = np.ones_like(self.charge_matrix)
-
+		self.f_PB_11_matrix = np.ones_like(self.charge_matrix)	
+		self.f_PB_12_matrix = np.ones_like(self.charge_matrix)	
+		self.f_PB_22_matrix = np.ones_like(self.charge_matrix)	
+		self.f_PB_13_matrix = np.ones_like(self.charge_matrix)	
+		
 		if self.improved_PauliBlocking == True:
 			θ = Degeneracy_Parameter(self.Te, self.ne)
-			a, b, n = 0.52035809, 1.2766832,  1.83874532
-			self.f_PB = 1/(b*(1 + (a/θ)**n)**(1/n) )
 			
-			self.f_PB_matrix[0,:] = self.f_PB
-			self.f_PB_matrix[:,0] = self.f_PB
+			# First e-i correction
+			f_PBei_function = lambda a, b, n: 1/(b*(1 + (a/θ)**n)**(1/n) )
+
+			a_ei_11,b_ei_11,n_ei_11 = 3.009e-01,1.102e+00,1.788e+00 # K_1,1
+			a_ei_12,b_ei_12,n_ei_12 = 2.361e-01,1.054e+00,1.864e+00 # K_1,2
+			a_ei_22,b_ei_22,n_ei_22 = 2.361e-01,1.054e+00,1.864e+00 # K_2,2
+			a_ei_13,b_ei_13,n_ei_13 = 1.940e-01,1.029e+00,1.969e+00 # K_1,3
+
+			f_PBei_11 = f_PBei_function(a_ei_11, b_ei_11, n_ei_11)
+			f_PBei_12 = f_PBei_function(a_ei_12, b_ei_12, n_ei_12)
+			f_PBei_22 = f_PBei_function(a_ei_22, b_ei_22, n_ei_22)
+			f_PBei_13 = f_PBei_function(a_ei_13, b_ei_13, n_ei_13)
+
+			self.f_PB_11_matrix[0,1:] = f_PBei_11
+			self.f_PB_12_matrix[0,1:] = f_PBei_12
+			self.f_PB_22_matrix[0,1:] = f_PBei_22
+			self.f_PB_13_matrix[0,1:] = f_PBei_13
+
+			self.f_PB_11_matrix[1:,0] = f_PBei_11
+			self.f_PB_12_matrix[1:,0] = f_PBei_12
+			self.f_PB_22_matrix[1:,0] = f_PBei_22
+			self.f_PB_13_matrix[1:,0] = f_PBei_13
+			
+			# Now e-e correction
+			f_PBee_function = lambda a, b, n, m: 1/(b*(1 + (a/θ)**(m*n))**(1/n) )
+
+			a_ee_11,b_ee_11,n_ee_11,m_ee_11 = 7.702e-01,1.500e+00,2.254e+00,1.146e+00 # K_1,1
+			a_ee_12,b_ee_12,n_ee_12,m_ee_12 = 6.066e-01,1.331e+00,2.076e+00,1.172e+00 # K_1,2
+			a_ee_22,b_ee_22,n_ee_22,m_ee_22 = 6.066e-01,1.331e+00,2.076e+00,1.172e+00 # K_2,2
+			a_ee_13,b_ee_13,n_ee_13,m_ee_13 = 4.975e-01,1.225e+00,1.987e+00,1.196e+00 # K_1,3
+
+			f_PBee_11 = f_PBee_function(a_ee_11, b_ee_11, n_ee_11, m_ee_11)
+			f_PBee_12 = f_PBee_function(a_ee_12, b_ee_12, n_ee_12, m_ee_12)
+			f_PBee_22 = f_PBee_function(a_ee_22, b_ee_22, n_ee_22, m_ee_22)
+			f_PBee_13 = f_PBee_function(a_ee_13, b_ee_13, n_ee_13, m_ee_13)
+
+			self.f_PB_11_matrix[0,0] = f_PBee_11
+			self.f_PB_12_matrix[0,0] = f_PBee_12
+			self.f_PB_22_matrix[0,0] = f_PBee_22
+			self.f_PB_13_matrix[0,0] = f_PBee_13
+
+			self.f_PB_11_matrix[0,0] = f_PBee_11
+			self.f_PB_12_matrix[0,0] = f_PBee_12
+			self.f_PB_22_matrix[0,0] = f_PBee_22
+			self.f_PB_13_matrix[0,0] = f_PBee_13
 		
-		self.K_11_matrix = self.f_PB_matrix * K_nm(self.g_matrix, 1, 1)
-		self.K_12_matrix = self.f_PB_matrix * K_nm(self.g_matrix, 1, 2)
-		self.K_21_matrix = self.f_PB_matrix * K_nm(self.g_matrix, 2, 1)
-		self.K_22_matrix = self.f_PB_matrix * K_nm(self.g_matrix, 2, 2)
-		self.K_13_matrix = self.f_PB_matrix * K_nm(self.g_matrix, 1, 3)
+		self.K_11_matrix = self.f_PB_11_matrix * K_nm(self.g_matrix, 1, 1)
+		self.K_12_matrix = self.f_PB_12_matrix * K_nm(self.g_matrix, 1, 2)
+		self.K_21_matrix = self.f_PB_12_matrix * K_nm(self.g_matrix, 2, 1)
+		self.K_22_matrix = self.f_PB_22_matrix * K_nm(self.g_matrix, 2, 2)
+		self.K_13_matrix = self.f_PB_13_matrix * K_nm(self.g_matrix, 1, 3)
 
 	def update_collision_Ωij(self):
 		self.Ω_11_matrix = np.sqrt(2*π/self.μ_matrix)*self.charge_matrix**2/self.T_matrix**1.5 * self.K_11_matrix
@@ -246,22 +290,14 @@ class TransportProperties():
 		"""
 		Diffraction corrected 
 		"""
-		μ_ee = m_e/2
-		μ_ei = m_e
-		λdB_ee = 1/np.sqrt(2*π*μ_ee*self.Te) # Approx by mi~0, so here the λdB_ee is sqrt(2) times bigger
-		λdB_ei = 1/np.sqrt(2*π*μ_ei*self.Te) # Approx by mi~0
+		λdB_matrix = 1/np.sqrt(π*self.m_matrix*self.T_matrix) # As defined using Λij in [3], used in [3]
+		# λdB_matrix = 1/np.sqrt(2*self.m_matrix*self.T_matrix) # As defined in GMS (by generalizing me-> μij = mij/2)
+		# λdB_matrix = np.sqrt(2*π)/np.sqrt(0.5*self.m_matrix*self.T_matrix) # Wikipedia with me -> mij/2
 
-		xi_array = self.ni_array/np.sum(self.ni_array) 
-		rc_av =   np.sum(xi_array * self.Zbar_array/ self.T_matrix[1:])/self.N_ions
-		
-		f_dB_ee = (  1  +  (2*π*λdB_ee/rc_av)**2) # extra 2π factor
-		f_dB_ei = (  1  +  (2*π*λdB_ei/rc_av)**2) # 
-		
-		self.f_dB_matrix = np.ones_like(self.charge_matrix)
-		self.f_dB_matrix[0,0]  = f_dB_ee
-		self.f_dB_matrix[0,1:] = f_dB_ei
-		self.f_dB_matrix[1:,0] = f_dB_ei
-		# self.f_dB_matrix[1:,1:]= 1
+		rc_matrix = np.abs(self.charge_matrix)/self.T_matrix		
+
+		self.f_dB_matrix = 1 + λdB_matrix**2/rc_matrix**2
+	
 		
 	def update_screening(self):
 		ρion = np.sum( self.ni_array*self._Zbar_array  )
