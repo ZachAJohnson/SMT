@@ -1,0 +1,7 @@
+# TCCW1 paper Hydrogen at 2 g/cc
+T[eV] σ[S/cm]   κe[erg/s/cm/K]     
+0.2   2.62e4    1.49e7
+2     1.31e4    7.41e7
+20    1.17e4    5.05e8
+200   1.83e5    5.06e10
+2000  3.27e6    8.89e12

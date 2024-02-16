@@ -331,7 +331,6 @@ class TransportProperties():
 		self.λi_array = 1/np.sqrt(4*π*self._Zbar_array**2*self.ni_array/self.Ti_array) 	
 
 		self.λeff = 1/np.sqrt( 1/(self.λe**2 + self.ae_correction**2 - self.γ0 ) + np.sum( 1/(self.λi_array**2 + self.ri_eff**2)  ))
-		
 		self.g_matrix = self.β_matrix*self.charge_matrix* np.sqrt(self.f_dB_matrix)/self.λeff # Equivalent to [3], but made not part of λeff here.
 
 	def update_physical_params(self):
@@ -438,7 +437,8 @@ class TransportProperties():
 
 		# Define κe by removing Kii, Kee
 		# Λei   = self._Zbar_array*(25*self.K_11_matrix[0,1:] - 20*self.K_12_matrix[0,1:] + 4*self.K_13_matrix[0,1:]) 
-		self.κe  = self.κ#75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λei)
+		# self.κe  = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λei)
+		self.κe  = self.κ
 
 
 
