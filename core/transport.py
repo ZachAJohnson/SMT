@@ -434,14 +434,10 @@ class TransportProperties():
 		self.κ   = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λ)
 		self.κii = 75*self.Ti_array**2.5/(64*np.sqrt(π*self.mi_array)* np.diag(self.K_22_matrix)[1:] )
 		self.κee = 75*Te**2.5/(64*np.sqrt(π*m_e)*self.K_22_matrix[0,0])
+		self.κe  = self.κ
 
 		# Define κe by removing Kii, Kee
 		# Λei   = self._Zbar_array*(25*self.K_11_matrix[0,1:] - 20*self.K_12_matrix[0,1:] + 4*self.K_13_matrix[0,1:]) 
-		# self.κe  = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λei)
-		self.κe  = self.κ
-
-
-
-
-
-
+		# self.κe_no_ee  = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λei)
+		self.κe_no_ee  = self.κ/(1-self.κ/self.κee)
+		
