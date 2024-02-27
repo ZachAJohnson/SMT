@@ -1,6 +1,6 @@
 import numpy as np
 
-from SMT.core.physical_parameters import ThomasFermiZbar, Fermi_Energy, Degeneracy_Parameter, xc_PDW_h, xc_YOT, thermal_deBroglie_wavelength, rs_from_n
+from SMT.core.physical_parameters import ThomasFermiZbar, Fermi_Energy, Degeneracy_Parameter, xc_PDW_h, xc_YOT, thermal_deBroglie_wavelength, rs_from_n, Kappa, Ion_Plasma_Frequency
 from SMT.core.physical_constants import *
 
 @np.vectorize
@@ -40,11 +40,6 @@ def K_nm(g, n, m):
 
 	g_arr = np.array([g, g**2, g**3, g**4, g**5])
 
-	# knm = np.where( g<1, 
-	# 			    -n/4 * np.math.factorial(m - 1) * np.log( np.sum(a[:,np.newaxis,np.newaxis]*g_arr,axis=0) ) ,
-	# 				(b[0] + b[1]*np.log(g) + b[2]*np.log(g)**2)/(1 + b[3]*g + b[4]*g**2) 
-	# 	    	  )    
-
 	if g<1:
 		knm = -n/4 * np.math.factorial(m - 1) * np.log( np.sum(a*g_arr,axis=0) )
 	else:
@@ -52,10 +47,7 @@ def K_nm(g, n, m):
 	return knm
 
 class TransportProperties():
-	"""Generate the Stanton and Murillo transport coefficients. test
-
-	Args:
-
+	"""Generate the Stanton and Murillo transport coefficients. Also included are (I)YVM viscosities, explicitly named.
 
 	References
 	----------
@@ -66,6 +58,8 @@ class TransportProperties():
 	   [3] 'Johnson, Zach A., ....... (2024)'
 	   [4] 'F. Perrot and M. Dharma-Wardana', Exchange and correlation potentials for electron-ion systems at finite tem-
       peratures, Physical Review A 30, 2619 (1984) <https://doi.org/10.1103/PhysRevA.30.2619>
+       [5] 'Murillo, Michael  "Viscosity estimates of liquid metals and warm dense matter using the Yukawa reference systems."
+        High Energy Density Physics, Volume 4, Issues 1–2, 2008, Pages 49-57, <https://doi.org/10.1016/j.hedp.2007.11.001.>
 	"""
 
 	def __init__(self, N_ions, ion_masses_AU, Zion_array, T_array_AU, ni_array_AU, Zbar_type='TF', Zbar_array=None,
@@ -115,7 +109,7 @@ class TransportProperties():
 		return self._ni_array
 
 	@ni_array.setter
-	def ni_array(self, n_array_update):
+	def ni_array(self, ni_array_update):
 		self._ni_array = ni_array_update
 		self.update_all_params()
 	
@@ -351,8 +345,10 @@ class TransportProperties():
 		self.inter_diffusion()
 		self.electrical_conductivity()
 		self.temperature_relaxation()
-		self.viscosity()
 		self.thermal_conductivity()
+		self.viscosity()
+		self.YVM_viscosity()
+		self.IYVM_viscosity()
 
 	def inter_diffusion(self):
 		""" 
@@ -409,21 +405,10 @@ class TransportProperties():
 		self.τij = numerator/denominator
 		return self.τij
 
-	def viscosity(self):
-		"""
-		Viscosity from Eq. 74 of [1] using multi-species Eq. 
-		To get cgs: AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
-		"""
-		if self.N_ions > 1:
-			print("Warning about viscosity: Only single-ion (and no electron) implemented. Returns single-species viscosity of each species input.")
-		Ωii_22 = np.diag(self.Ω_22_matrix)[1:]
-		self.ηi = 5*self.Ti_array/(8*Ωii_22)
-		return self.ηi
-
 	def thermal_conductivity(self):
 		"""
 		Thermal conductivity approximated by Eq.17 of [2]
-
+		Note there is an ambiguity about how to divide the conductivity between electronic and ionic contributions, resulting in the various κee, κii, κe, and κe_no_ee definitions below.  
 		"""
 		if self.N_ions > 1:
 				print("Warning about themal conductivity: Only single-ion implemented. Returns array of single-species e-i conductivities of each species input.")		
@@ -441,3 +426,68 @@ class TransportProperties():
 		# self.κe_no_ee  = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λei)
 		self.κe_no_ee  = self.κ/(1-self.κ/self.κee)
 		
+	def viscosity(self):
+		"""
+		Viscosity from Eq. 74 of [1] using multi-species Eq. 
+		To get cgs: AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
+		"""
+		if self.N_ions > 1:
+			print("Warning about viscosity: Only single-ion (and no electron) implemented. Returns single-species viscosity of each species input.")
+		Ωii_22 = np.diag(self.Ω_22_matrix)[1:]
+		self.ηi = 5*self.Ti_array/(8*Ωii_22)
+		return self.ηi
+
+	def YVM_viscosity(self):
+		"""
+		The viscosity based on the YVM model [5], itself based on Yukawa molecular dynamic viscosities.
+		Only single species implemented so far. Output is array of each ionic viscosity.
+		"""
+		if self.N_ions > 1:
+			print("Warning about themal conductivity: Only single-ion implemented. Returns array of single-species e-i conductivities of each species input.")		
+
+		κ_array = Kappa(self.Ti_array, self.ni_array, self.Zbar_array)
+
+		ω_p_array = Ion_Plasma_Frequency(self.ni_array, self.mi_array, self.Zbar_array)
+		ω_E_array = np.exp(-0.2*κ_array**1.62)/np.sqrt(3)*ω_p_array
+
+		ai_array = rs_from_n(self.ni_array)
+		η_0_array   = np.sqrt(3) * ω_E_array * self.mi_array * self.ni_array * ai_array**2
+		Γ_array = self.Zbar_array**2/(ai_array*self.Ti_array)
+
+		# Yukawa melting transition temperature
+		Γ_melt_array = 171.8 + 82.8*(np.exp(0.565*κ_array**1.38) - 1) 
+
+		# Actual YVM formula
+		self.η_YVM_array = η_0_array*(0.0051*Γ_melt_array/Γ_array + 0.374*Γ_array/Γ_melt_array + 0.022)
+		return self.η_YVM_array # * AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
+
+	def IYVM_viscosity(self):
+		"""
+		Extension to YVM based on improvements in [4], which include high-T SMT results for the fit.
+		"""
+		if self.N_ions > 1:
+			print("Warning about themal conductivity: Only single-ion implemented. Returns array of single-species e-i conductivities of each species input.")		
+
+		κ_array = Kappa(self.Ti_array, self.ni_array, self.Zbar_array)
+
+		ω_p_array = Ion_Plasma_Frequency(self.ni_array, self.mi_array, self.Zbar_array)
+		ω_E_array = np.exp(-0.2*κ_array**1.62)/np.sqrt(3)*ω_p_array
+
+		ai_array = rs_from_n(self.ni_array)
+		η_0_array   = np.sqrt(3) * ω_E_array * self.mi_array * self.ni_array * ai_array**2
+		Γ_array = self.Zbar_array**2/(ai_array*self.Ti_array)
+
+		# Yukawa melting transition temperature
+		Γ_melt_array = 171.8 + 82.8*(np.exp(0.565*κ_array**1.38) - 1) 
+
+		# Now for numerical parameters for fit
+		A = 1.45e-4 - 1.04e-4*κ_array + 3.69e-5*κ_array**2
+		B = 0.3 + 0.86*κ_array-0.69*κ_array**2 + 0.138*κ_array**3
+		C = 0.015 + 0.048*κ_array*0.754
+		a = 1.78 + 0.13*κ_array - 0.062*κ_array**2
+		b = 1.63 - 0.325*κ_array + 0.24*κ_array**2
+
+		# Actual IYVM formula
+		self.η_IYVM_array = η_0_array*( A*(Γ_melt_array/Γ_array)**a + B*(Γ_array/Γ_melt_array)**b + C )
+
+		return self.η_IYVM_array # * AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
