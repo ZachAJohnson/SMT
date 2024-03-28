@@ -63,7 +63,7 @@ class TransportProperties():
 	"""
 
 	def __init__(self, N_ions, ion_masses_AU, Zion_array, T_array_AU, ni_array_AU, Zbar_type='TF', Zbar_array=None,
-						 improved_xc_SMT=False, improved_λdB_SMT=False, improved_ae_SMT=False, improved_PauliBlocking=False,  xc_type='PDW', λdB_n = 2):
+						 improved_xc_SMT=False, improved_λdB_SMT=False, improved_ae_SMT=False, improved_PauliBlocking=False,  xc_type='YOT', λdB_n = 2):
 		"""
 		Defaults to SMT model in [1,2], with improved_... denoting the improvements in [3]
 		"""
@@ -455,10 +455,10 @@ class TransportProperties():
 		Γ_array = self.Zbar_array**2/(ai_array*self.Ti_array)
 
 		# Yukawa melting transition temperature
-		Γ_melt_array = 171.8 + 82.8*(np.exp(0.565*κ_array**1.38) - 1) 
+		self.Γ_melt_array = 171.8 + 82.8*(np.exp(0.565*κ_array**1.38) - 1) 
 
 		# Actual YVM formula
-		self.η_YVM_array = η_0_array*(0.0051*Γ_melt_array/Γ_array + 0.374*Γ_array/Γ_melt_array + 0.022)
+		self.η_YVM_array = η_0_array*(0.0051*self.Γ_melt_array/Γ_array + 0.374*Γ_array/self.Γ_melt_array + 0.022)
 		return self.η_YVM_array # * AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
 
 	def IYVM_viscosity(self):
@@ -478,7 +478,7 @@ class TransportProperties():
 		Γ_array = self.Zbar_array**2/(ai_array*self.Ti_array)
 
 		# Yukawa melting transition temperature
-		Γ_melt_array = 171.8 + 82.8*(np.exp(0.565*κ_array**1.38) - 1) 
+		self.Γ_melt_array = 171.8 + 82.8*(np.exp(0.565*κ_array**1.38) - 1) 
 
 		# Now for numerical parameters for fit
 		A = 1.45e-4 - 1.04e-4*κ_array + 3.69e-5*κ_array**2
@@ -488,6 +488,6 @@ class TransportProperties():
 		b = 1.63 - 0.325*κ_array + 0.24*κ_array**2
 
 		# Actual IYVM formula
-		self.η_IYVM_array = η_0_array*( A*(Γ_melt_array/Γ_array)**a + B*(Γ_array/Γ_melt_array)**b + C )
+		self.η_IYVM_array = η_0_array*( A*(self.Γ_melt_array/Γ_array)**a + B*(Γ_array/self.Γ_melt_array)**b + C )
 
 		return self.η_IYVM_array # * AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s

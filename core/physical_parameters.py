@@ -27,10 +27,10 @@ def Electron_Plasma_Frequency(ne):
     ωe = np.sqrt(4 * π * ne /m_e)
     return ωe
 
-def Gamma(T, n, Z):
+def Gamma(T, n, Q): # Q is Zbar for ions
     β = 1/T
     rs = rs_from_n(n)
-    return Z**2*β/rs
+    return Q**2*β/rs
 
 def Debye_length(T, ni, Zbar):
     ne = Zbar*ni
@@ -125,12 +125,15 @@ def xc_YOT(Te, ne):
     β = 1/Te
     sech = lambda x: 1/np.cosh(x)
     γx = 1/(2*π) * (3*ne/(8*π))**(1/3) * np.tanh(4/(9*θ)) + ne/(12*Te) * sech(4/(9*θ))**2
-    a = -1.51
-    b = -0.840
-    c = 0.275
-    d = -0.553
 
-    γc = 1/4 * (β*ne/π)**(1/2) *( np.tanh(c*β**a*ne**b/(1+β**d)) + 2/3 * b*c*β**a/(1 + β**d*ne**(b+1/2))*sech(c*β**a*ne**b/(1+β**d))**2  )
+    c1 = -1.51
+    c2 = -0.840
+    c3 = 0.275
+    c4 = -0.553
+    c5 = 0.0103
+
+    γc = ( 1/4 * (β*ne/π)**(1/2) *( np.tanh(c3*β**c1*ne**c2/(1+β**c4)) + 2/3 * c2*c3*β**c1*ne**(c2 + 1/2)/(1 + β**c4)*sech(c3*β**c1*ne**c2/(1+β**c4))**2  ) 
+        - c5*( np.log(1 + ne) + ne/(1+ne) )  )
     γxc = γx + γc
     return γxc
 

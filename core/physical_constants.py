@@ -4,9 +4,10 @@ from numpy import pi
 
 m_e = 1
 m_p = 1836.1526724584617 # In AU
-m_amu = m_p/1.007276466812 # 1/12 of carbon mass
 aB = 5.29177210903e-11 # Bohr radius in m
 k_B = 1.380649e-23 # SI J/K
+
+amu_to_AU = m_p/1.007276466812 # 1/12 of carbon mass
 
 eV_to_AU = 0.03674932539796232 # PDG
 eV_to_K = 11604.5250061598
