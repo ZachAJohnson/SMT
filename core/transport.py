@@ -235,7 +235,7 @@ class TransportProperties():
 	def update_charges(self):
 		# Check if need to compute TF ionization
 		if self.Zbar_type == 'TF':
-			self._Zbar_array[:] = ThomasFermiZbar(self._Zi_array, self._ni_array, self._T_array[1:])
+			self._Zbar_array[:] = ThomasFermiZbar(self._Zi_array, self._ni_array, self._T_array[0])
 		
 		# Get full charge matrix Z_i Z_j
 		self.charge_matrix[0,1:]  = self._Zbar_array
@@ -417,7 +417,10 @@ class TransportProperties():
 		Te  = self.T_matrix[0,0]
 		Λ   = np.sqrt(8)*self.K_22_matrix[0,0] + self._Zbar_array*(25*self.K_11_matrix[0,1:] - 20*self.K_12_matrix[0,1:] + 4*self.K_13_matrix[0,1:]) 
 		self.κ   = 75*Tei**2.5/(16*np.sqrt(2*π*m_e)*Λ)
-		self.κii = 75*self.Ti_array**2.5/(64*np.sqrt(π*self.mi_array)* np.diag(self.K_22_matrix)[1:] )
+		# self.κii = 75*self.Ti_array**2.5/(64*np.sqrt(π*self.mi_array)*np.diag(self.charge_matrix)[1:]**0*np.diag(self.K_22_matrix)[1:] )
+		# self.κii = 75*self.Ti_array**2.5/(64*np.sqrt(π*self.mi_array)*np.diag(self.charge_matrix)[1:]**2*np.diag(self.K_22_matrix)[1:] )
+		Ωii_22 = np.diag(self.Ω_22_matrix)[1:]
+		self.κii = 75*self.Ti_array/(32*Ωii_22*self.mi_array)
 		self.κee = 75*Te**2.5/(64*np.sqrt(π*m_e)*self.K_22_matrix[0,0])
 		self.κe  = self.κ
 
@@ -445,7 +448,7 @@ class TransportProperties():
 		if self.N_ions > 1:
 			print("Warning about themal conductivity: Only single-ion implemented. Returns array of single-species e-i conductivities of each species input.")		
 
-		κ_array = Kappa(self.Ti_array, self.ni_array, self.Zbar_array)
+		κ_array = Kappa(self.T_array[0], self.ni_array, self.Zbar_array)
 
 		ω_p_array = Ion_Plasma_Frequency(self.ni_array, self.mi_array, self.Zbar_array)
 		ω_E_array = np.exp(-0.2*κ_array**1.62)/np.sqrt(3)*ω_p_array
@@ -468,7 +471,7 @@ class TransportProperties():
 		if self.N_ions > 1:
 			print("Warning about themal conductivity: Only single-ion implemented. Returns array of single-species e-i conductivities of each species input.")		
 
-		κ_array = Kappa(self.Ti_array, self.ni_array, self.Zbar_array)
+		κ_array = Kappa(self.T_array[0], self.ni_array, self.Zbar_array)
 
 		ω_p_array = Ion_Plasma_Frequency(self.ni_array, self.mi_array, self.Zbar_array)
 		ω_E_array = np.exp(-0.2*κ_array**1.62)/np.sqrt(3)*ω_p_array
