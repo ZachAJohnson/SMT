@@ -494,3 +494,40 @@ class TransportProperties():
 		self.η_IYVM_array = η_0_array*( A*(self.Γ_melt_array/Γ_array)**a + B*(Γ_array/self.Γ_melt_array)**b + C )
 
 		return self.η_IYVM_array # * AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
+	
+	def get_SMT_η_cgs(self, Te_AU, Ti_AU, Zbar=None):
+	    self.T_array = np.array([Te_AU, Ti_AU ])
+	    if Zbar is not None:
+	    	self.Zbar_array = np.array([Zbar])
+	    print(self.charge_matrix**2)
+	    return self.ηi*AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
+
+	def get_YVM_η_cgs(self, Te_AU, Ti_AU, Zbar=None):
+	    self.T_array = np.array([Te_AU, Ti_AU ])
+	    if Zbar is not None:
+	    	self.Zbar_array = np.array([Zbar])
+	    return self.η_YVM_array*AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
+
+	def get_IYVM_η_cgs(self, Te_AU, Ti_AU, Zbar=None):
+	    self.T_array = np.array([Te_AU, Ti_AU ])
+	    if Zbar is not None:
+	    	self.Zbar_array = np.array([Zbar])
+	    return self.η_IYVM_array*AU_to_g*AU_to_invcc*AU_to_cm**2/AU_to_s
+
+	def get_SMT_Zbar(self, Te_AU, Ti_AU, Zbar=None):
+	    self.T_array = np.array([Te_AU, Ti_AU ])
+	    if Zbar is not None:
+	    	self.Zbar_array = np.array([Zbar])
+	    return self.Zbar_array
+
+	def get_SMT_κi_cgs(self, Te_AU, Ti_AU, Zbar=None):
+	    self.T_array = np.array([Te_AU, Ti_AU ])
+	    if Zbar is not None:
+	    	self.Zbar_array = np.array([Zbar])
+	    return self.κii*AU_to_erg/(AU_to_cm*AU_to_s*AU_to_K)
+
+	def get_SMT_D_cgs(self, Te_AU, Ti_AU, Zbar=None):
+	    self.T_array = np.array([Te_AU, Ti_AU ])
+	    if Zbar is not None:
+	    	self.Zbar_array = np.array([Zbar])
+	    return self.D_array[1]*AU_to_cm**2/AU_to_s
